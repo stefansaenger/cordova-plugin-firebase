@@ -42,6 +42,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.Random;
 
 // Firebase PhoneAuth
 import java.util.concurrent.TimeUnit;
@@ -205,13 +206,16 @@ public class FirebasePlugin extends CordovaPlugin {
             this.setAnalyticsCollectionEnabled(callbackContext, args.getBoolean(0));
             return true;
         } else if (action.equals("setPerformanceCollectionEnabled")) {
-          this.setPerformanceCollectionEnabled(callbackContext, args.getBoolean(0));
-          return true;
+            this.setPerformanceCollectionEnabled(callbackContext, args.getBoolean(0));
+            return true;
         } else if (action.equals("clearAllNotifications")) {
             this.clearAllNotifications(callbackContext);
             return true;
         } else if (action.equals("clear")) {
             this.clear(callbackContext, args.getInt(0));
+            return true;
+        } else if (action.equals("scheduleLocalNotification")) {
+            this.scheduleLocalNotification(callbackContext, args.getJSONObject(0));
             return true;
         }
 
@@ -1124,4 +1128,34 @@ public class FirebasePlugin extends CordovaPlugin {
             }
         });
     }
+
+    public void scheduleLocalNotification(final CallbackContext callbackContext, final JSONObject params) {
+       cordova.getThreadPool().execute(new Runnable() {
+           public void run() {
+               try {
+                   Context context = cordova.getActivity();
+
+                   Random rand = new Random();
+                   int n = rand.nextInt(1000) + 1;
+                   String id = Integer.toString(n);
+                   String target = params.getString("target");
+                   String username = params.getString("username");
+                   String groupName = params.getString("groupName");
+                   String message = params.getString("message");
+                   String eventType = params.getString("eventType");
+                   String nsound = params.getString("nsound");
+                   String sound = params.getString("sound");
+                   String lights = params.getString("lights");
+
+                   FirebasePluginMessagingService.displayNotification(context, id, target, username, groupName, message, eventType, nosound, true, sound, lights);
+
+                   callbackContext.success();
+               } catch (Exception e) {
+                   if(FirebasePlugin.crashlyticsInit()){
+                       Crashlytics.log(e.getMessage());
+                   }
+               }
+           }
+       });
+   }
 }

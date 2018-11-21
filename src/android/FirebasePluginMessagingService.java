@@ -49,10 +49,10 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
     private static final String VNC_PEER_JID = "vncPeerJid";
     private static final String NOTIFY_ID = "id";
 
-    private String getStringResource(String name) {
-        return this.getString(
-                this.getResources().getIdentifier(
-                        name, "string", this.getPackageName()
+    private static String getStringResource(Context context, String name) {
+        return context.getString(
+                context.getResources().getIdentifier(
+                        name, "string", context.getPackageName()
                 )
         );
     }
@@ -132,21 +132,13 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
                 String eventType = notification.eType;
                 String nsound = notification.nsound;
 
-            		Log.d(TAG, "Notification id: " + id);
-            		Log.d(TAG, "Notification Target: " + target);
-            		Log.d(TAG, "Notification username: " + username);
-            		Log.d(TAG, "Notification groupName: " + groupName);
-            		Log.d(TAG, "Notification message: " + message);
-            		Log.d(TAG, "Notification eventType: " + eventType);
-                Log.d(TAG, "Notification nsound: " + nsound);
-
                 if (TextUtils.isEmpty(target) || TextUtils.isEmpty(username)) {
-		                Log.d(TAG, "returning due to empty values");
+		                Log.d(TAG, "returning due to empty 'target' or 'username' values");
                     return;
                 }
 
                 boolean showNotification = (FirebasePlugin.inBackground() || !FirebasePlugin.hasNotificationsCallback());
-                sendNotification(id, target, username, groupName, message, eventType, nsound, showNotification, "", "");
+                displayNotification(this, id, target, username, groupName, message, eventType, nsound, showNotification, "", "");
 
                 try {
                     StringBuffer output = new StringBuffer();
@@ -190,7 +182,18 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
         }
     }
 
-    private void sendNotification(String id, String target, String name, String groupName, String message, String eventType, String nosound, boolean showNotification, String sound, String lights) {
+    public static void displayNotification(Context context, String id, String target, String name, String groupName, String message, String eventType, String nosound, boolean showNotification, String sound, String lights) {
+        Log.d(TAG, "displayNotification: id: " + id);
+        Log.d(TAG, "displayNotification: Target: " + target);
+        Log.d(TAG, "displayNotification: username: " + username);
+        Log.d(TAG, "displayNotification: groupName: " + groupName);
+        Log.d(TAG, "displayNotification: message: " + message);
+        Log.d(TAG, "displayNotification: eventType: " + eventType);
+        Log.d(TAG, "displayNotification: nsound: " + nsound);
+        Log.d(TAG, "displayNotification: showNotification: " + showNotification);
+        Log.d(TAG, "displayNotification: sound: " + sound);
+        Log.d(TAG, "displayNotification: lights: " + lights);
+
         if (!showNotification) {
           return;
         }
@@ -208,13 +211,13 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
 
             replyPendingIntent = PendingIntent.getBroadcast(getApplicationContext(),
                     REQUEST_CODE_HELP,
-                    new Intent(this, NotificationReceiver.class)
+                    new Intent(context, NotificationReceiver.class)
                             .setAction(inlineReplyActionName),
                     0);
 
             markAsReadPendingIntent = PendingIntent.getBroadcast(getApplicationContext(),
                     REQUEST_CODE_HELP,
-                    new Intent(this, NotificationReceiver.class)
+                    new Intent(context, NotificationReceiver.class)
                             .setAction(markAsReadActionName),
                     0);
         } else {
@@ -222,13 +225,13 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
 
             replyPendingIntent = PendingIntent.getActivity(getApplicationContext(),
                     REQUEST_CODE_HELP,
-                    new Intent(this, ReplyActivity.class)
+                    new Intent(context, ReplyActivity.class)
                             .setAction(inlineReplyActionName),
                     0);
 
             markAsReadPendingIntent = PendingIntent.getActivity(getApplicationContext(),
                     REQUEST_CODE_HELP,
-                    new Intent(this, ReplyActivity.class)
+                    new Intent(context, ReplyActivity.class)
                             .setAction(markAsReadActionName),
                     0);
         }
@@ -246,21 +249,21 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
 
         Log.d(TAG, "going to show notification with " + nosound);
 
-        Intent intent = new Intent(this, OnNotificationOpenReceiver.class);
+        Intent intent = new Intent(context, OnNotificationOpenReceiver.class);
         Bundle bundle = new Bundle();
         bundle.putString(VNC_PEER_JID, target);
         bundle.putString("vncEventType", "chat");
         bundle.putInt(NOTIFY_ID, notificationId);
         intent.putExtras(bundle);
-        PendingIntent pendingIntent = PendingIntent.getBroadcast(this, Integer.parseInt(id), intent, PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(context, Integer.parseInt(id), intent, PendingIntent.FLAG_UPDATE_CURRENT);
 
-        String channelId = this.getStringResource("default_notification_channel_id");
-        String channelName = this.getStringResource("default_notification_channel_name");
+        String channelId = getStringResource(context, "default_notification_channel_id");
+        String channelName = getStringResource(context, "default_notification_channel_name");
         Uri defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
         if (nosound.equals("mute")) {
             Log.d(TAG, "notification nosound - switching channel");
-            channelId = this.getStringResource("silent_notification_channel_id");
-            channelName = this.getStringResource("silent_notification_channel_name");
+            channelId = getStringResource(context, "silent_notification_channel_id");
+            channelName = getStringResource(context, "silent_notification_channel_name");
             defaultSoundUri = null;
         }
 
@@ -279,7 +282,7 @@ public class FirebasePluginMessagingService extends FirebaseMessagingService {
 
         Log.d(TAG, "Notification group name: " + title);
 
-        NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(this, channelId);
+        NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(context, channelId);
 
         if (nosound.equals("mute")) {
             Log.d(TAG, "notification nosound: " + title);
