@@ -32,6 +32,10 @@ exports.onNotificationOpen = function (success, error) {
   exec(success, error, "FirebasePlugin", "onNotificationOpen", []);
 };
 
+exports.onNotificationMarkAsRead = function (success, error) {
+  exec(success, error, "FirebasePlugin", "onNotificationMarkAsRead", []);
+};
+
 exports.onTokenRefresh = function (success, error) {
   exec(success, error, "FirebasePlugin", "onTokenRefresh", []);
 };
@@ -178,4 +182,8 @@ exports.clearAllNotifications = function (success, error) {
 
 exports.clear = function (id, success, error) {
     exec(success, error, "FirebasePlugin", "clear", [id]);
+};
+
+exports.scheduleLocalNotification = function (params, success, error) {
+    exec(success, error, "FirebasePlugin", "scheduleLocalNotification", [params]);
 };

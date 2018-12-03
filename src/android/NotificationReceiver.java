@@ -27,23 +27,23 @@ public class NotificationReceiver extends BroadcastReceiver {
         if (intent.getAction().contains(NOTIFICATION_REPLY)) {
             String[] actionParts = intent.getAction().split("@@");
             int notificationId = Integer.parseInt(actionParts[1]);
-            String sender = actionParts[2];
+            String target = actionParts[2];
             CharSequence message = getReplyMessage(intent);
 
-            Log.i("VNC", "NotificationReceiver onReceive NotificationReply, notificationId: " + notificationId + ", sender: " + sender + ", message: " + message);
+            Log.i("VNC", "NotificationReceiver onReceive NotificationReply, notificationId: " + notificationId + ", target: " + target + ", message: " + message);
 
             if (message != null && message.length() > 0) {
-                Thread thread = new Thread(new HttpPost(message.toString(), sender, notificationId, context));
+                Thread thread = new Thread(new HttpPost(message.toString(), target, notificationId, context));
                 thread.start();
             }
         }else if (intent.getAction().contains(MARK_AS_READ_REPLY)) {
           String[] actionParts = intent.getAction().split("@@");
           int notificationId = Integer.parseInt(actionParts[1]);
-          String sender = actionParts[2];
+          String target = actionParts[2];
 
-          Log.i("VNC", "NotificationReceiver onReceive MarkAsReadReply, notificationId: " + notificationId + ", sender: " + sender);
+          Log.i("VNC", "NotificationReceiver onReceive MarkAsReadReply, notificationId: " + notificationId + ", target: " + target);
 
-          Thread thread = new Thread(new HttpPost(sender, notificationId, context));
+          Thread thread = new Thread(new HttpPost(target, notificationId, context));
           thread.start();
         }
     }

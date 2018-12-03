@@ -73,6 +73,7 @@ public class FirebasePlugin extends CordovaPlugin {
     private static ArrayList<Bundle> notificationStack = null;
     private static CallbackContext notificationCallbackContext;
     private static CallbackContext tokenRefreshCallbackContext;
+    private static CallbackContext notificationMarkAsReadCallbackContext;
 
     @Override
     protected void pluginInitialize() {
@@ -133,6 +134,9 @@ public class FirebasePlugin extends CordovaPlugin {
             return true;
         } else if (action.equals("onNotificationOpen")) {
             this.onNotificationOpen(callbackContext);
+            return true;
+        } else if (action.equals("onNotificationMarkAsRead")) {
+            this.onNotificationMarkAsRead(callbackContext);
             return true;
         } else if (action.equals("onTokenRefresh")) {
             this.onTokenRefresh(callbackContext);
@@ -205,13 +209,16 @@ public class FirebasePlugin extends CordovaPlugin {
             this.setAnalyticsCollectionEnabled(callbackContext, args.getBoolean(0));
             return true;
         } else if (action.equals("setPerformanceCollectionEnabled")) {
-          this.setPerformanceCollectionEnabled(callbackContext, args.getBoolean(0));
-          return true;
+            this.setPerformanceCollectionEnabled(callbackContext, args.getBoolean(0));
+            return true;
         } else if (action.equals("clearAllNotifications")) {
             this.clearAllNotifications(callbackContext);
             return true;
         } else if (action.equals("clear")) {
             this.clear(callbackContext, args.getInt(0));
+            return true;
+        } else if (action.equals("scheduleLocalNotification")) {
+            this.scheduleLocalNotification(callbackContext, args.getJSONObject(0));
             return true;
         }
 
@@ -232,6 +239,7 @@ public class FirebasePlugin extends CordovaPlugin {
     public void onReset() {
         FirebasePlugin.notificationCallbackContext = null;
         FirebasePlugin.tokenRefreshCallbackContext = null;
+        FirebasePlugin.notificationMarkAsReadCallbackContext = null;
     }
 
     @Override
@@ -299,6 +307,10 @@ public class FirebasePlugin extends CordovaPlugin {
         }
     }
 
+    private void onNotificationMarkAsRead(final CallbackContext callbackContext) {
+        FirebasePlugin.notificationMarkAsReadCallbackContext = callbackContext;
+    }
+
     private void onTokenRefresh(final CallbackContext callbackContext) {
         FirebasePlugin.tokenRefreshCallbackContext = callbackContext;
 
@@ -351,6 +363,32 @@ public class FirebasePlugin extends CordovaPlugin {
         }
     }
 
+    public static void sendNotificationMarkAsRead(Bundle bundle) {
+        final CallbackContext callbackContext = FirebasePlugin.notificationMarkAsReadCallbackContext;
+
+        if(callbackContext == null || bundle == null){
+            return;
+        }
+
+        JSONObject json = new JSONObject();
+        Set<String> keys = bundle.keySet();
+        for (String key : keys) {
+            try {
+                json.put(key, bundle.get(key));
+            } catch (JSONException e) {
+                if(FirebasePlugin.crashlyticsInit()){
+                  Crashlytics.logException(e);
+                }
+                callbackContext.error(e.getMessage());
+                return;
+            }
+        }
+
+        PluginResult pluginresult = new PluginResult(PluginResult.Status.OK, json);
+        pluginresult.setKeepCallback(true);
+        callbackContext.sendPluginResult(pluginresult);
+    }
+
     public static void sendToken(String token) {
         if (FirebasePlugin.tokenRefreshCallbackContext == null) {
             return;
@@ -382,6 +420,10 @@ public class FirebasePlugin extends CordovaPlugin {
 
     public static boolean hasNotificationsCallback() {
         return FirebasePlugin.notificationCallbackContext != null;
+    }
+
+    public static boolean hasNotificationsMarkAsReadCallback() {
+        return FirebasePlugin.notificationMarkAsReadCallbackContext != null;
     }
 
     @Override
@@ -1124,4 +1166,34 @@ public class FirebasePlugin extends CordovaPlugin {
             }
         });
     }
+
+    public void scheduleLocalNotification(final CallbackContext callbackContext, final JSONObject params) {
+       cordova.getThreadPool().execute(new Runnable() {
+           public void run() {
+               try {
+                   Context activityContext = cordova.getActivity();
+                   Context appContext = activityContext.getApplicationContext();
+
+                   String id = params.getString("id");
+                   String target = params.getString("target");
+                   String username = params.getString("username");
+                   String groupName = params.getString("groupName");
+                   String message = params.getString("message");
+                   String eventType = params.getString("eventType");
+                   String nsound = params.getString("nsound");
+                   String sound = params.getString("sound");
+                   String lights = params.getString("lights");
+
+                   FirebasePluginMessagingService.displayNotification(activityContext, appContext, id, target, username, groupName, message, eventType, nsound, true, sound, lights);
+
+                   callbackContext.success();
+               } catch (Exception e) {
+                   if(FirebasePlugin.crashlyticsInit()){
+                       Crashlytics.log(e.getMessage());
+                   }
+                   callbackContext.error(e.getMessage());
+               }
+           }
+       });
+   }
 }
