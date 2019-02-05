@@ -1,38 +1,38 @@
 package org.apache.cordova.firebase;
 
-import android.app.NotificationManager;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.support.v4.app.NotificationManagerCompat;
 import android.util.Base64;
 import android.util.Log;
 
 import com.crashlytics.android.Crashlytics;
-import io.fabric.sdk.android.Fabric;
-
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.FirebaseApp;
+import com.google.firebase.FirebaseException;
+import com.google.firebase.FirebaseTooManyRequestsException;
 import com.google.firebase.analytics.FirebaseAnalytics;
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException;
+import com.google.firebase.auth.PhoneAuthCredential;
+import com.google.firebase.auth.PhoneAuthProvider;
 import com.google.firebase.iid.FirebaseInstanceId;
 import com.google.firebase.messaging.FirebaseMessaging;
+import com.google.firebase.perf.FirebasePerformance;
+import com.google.firebase.perf.metrics.Trace;
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig;
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigInfo;
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigSettings;
 import com.google.firebase.remoteconfig.FirebaseRemoteConfigValue;
-import com.google.firebase.perf.FirebasePerformance;
-import com.google.firebase.perf.metrics.Trace;
-
-import me.leolin.shortcutbadger.ShortcutBadger;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaPlugin;
-import org.apache.cordova.PluginResult;
 import org.apache.cordova.CordovaWebView;
+import org.apache.cordova.PluginResult;
+import org.apache.cordova.firebase.notification.NotificationManager;
+import org.apache.cordova.firebase.utils.SharedPrefsUtils;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -42,18 +42,12 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
-
-// Firebase PhoneAuth
 import java.util.concurrent.TimeUnit;
 
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.AuthResult;
-import com.google.firebase.FirebaseException;
-import com.google.firebase.auth.FirebaseAuthException;
-import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException;
-import com.google.firebase.FirebaseTooManyRequestsException;
-import com.google.firebase.auth.PhoneAuthCredential;
-import com.google.firebase.auth.PhoneAuthProvider;
+import io.fabric.sdk.android.Fabric;
+import me.leolin.shortcutbadger.ShortcutBadger;
+
+// Firebase PhoneAuth
 
 public class FirebasePlugin extends CordovaPlugin {
 
@@ -73,6 +67,7 @@ public class FirebasePlugin extends CordovaPlugin {
     private static ArrayList<Bundle> notificationStack = null;
     private static CallbackContext notificationCallbackContext;
     private static CallbackContext tokenRefreshCallbackContext;
+    private static CallbackContext notificationMarkAsReadCallbackContext;
 
     @Override
     protected void pluginInitialize() {
@@ -96,14 +91,14 @@ public class FirebasePlugin extends CordovaPlugin {
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
         if (action.equals("initCrashlytics")) {
-          this.initCrashlytics(callbackContext);
-          return true;
+            this.initCrashlytics(callbackContext);
+            return true;
         } else if (action.equals("initAnalytics")) {
-          this.initAnalytics(callbackContext);
-          return true;
+            this.initAnalytics(callbackContext);
+            return true;
         } else if (action.equals("initPerformance")) {
-          this.initPerformance(callbackContext);
-          return true;
+            this.initPerformance(callbackContext);
+            return true;
         } else if (action.equals("getInstanceId")) {
             this.getInstanceId(callbackContext);
             return true;
@@ -133,6 +128,9 @@ public class FirebasePlugin extends CordovaPlugin {
             return true;
         } else if (action.equals("onNotificationOpen")) {
             this.onNotificationOpen(callbackContext);
+            return true;
+        } else if (action.equals("onNotificationMarkAsRead")) {
+            this.onNotificationMarkAsRead(callbackContext);
             return true;
         } else if (action.equals("onTokenRefresh")) {
             this.onTokenRefresh(callbackContext);
@@ -205,13 +203,16 @@ public class FirebasePlugin extends CordovaPlugin {
             this.setAnalyticsCollectionEnabled(callbackContext, args.getBoolean(0));
             return true;
         } else if (action.equals("setPerformanceCollectionEnabled")) {
-          this.setPerformanceCollectionEnabled(callbackContext, args.getBoolean(0));
-          return true;
+            this.setPerformanceCollectionEnabled(callbackContext, args.getBoolean(0));
+            return true;
         } else if (action.equals("clearAllNotifications")) {
             this.clearAllNotifications(callbackContext);
             return true;
         } else if (action.equals("clear")) {
             this.clear(callbackContext, args.getInt(0));
+            return true;
+        } else if (action.equals("scheduleLocalNotification")) {
+            this.scheduleLocalNotification(callbackContext, args.getJSONObject(0));
             return true;
         }
 
@@ -232,6 +233,7 @@ public class FirebasePlugin extends CordovaPlugin {
     public void onReset() {
         FirebasePlugin.notificationCallbackContext = null;
         FirebasePlugin.tokenRefreshCallbackContext = null;
+        FirebasePlugin.notificationMarkAsReadCallbackContext = null;
     }
 
     @Override
@@ -248,11 +250,11 @@ public class FirebasePlugin extends CordovaPlugin {
 
         Log.d(TAG, "Initialising Crashlytics");
         try {
-          Fabric.with(context, new Crashlytics());
-          FirebasePlugin.crashlyticsInit = true;
-          callbackContext.success();
-        } catch(Exception e) {
-          callbackContext.error(ERRORINITCRASHLYTICS);
+            Fabric.with(context, new Crashlytics());
+            FirebasePlugin.crashlyticsInit = true;
+            callbackContext.success();
+        } catch (Exception e) {
+            callbackContext.error(ERRORINITCRASHLYTICS);
         }
     }
 
@@ -261,15 +263,15 @@ public class FirebasePlugin extends CordovaPlugin {
 
         Log.d(TAG, "Initialising Analytics");
         try {
-          mFirebaseAnalytics = FirebaseAnalytics.getInstance(context);
-          mFirebaseAnalytics.setAnalyticsCollectionEnabled(true);
-          FirebasePlugin.analyticsInit = true;
-          callbackContext.success();
-        } catch(Exception e) {
-          if(FirebasePlugin.crashlyticsInit()){
-            Crashlytics.logException(e);
-          }
-          callbackContext.error(ERRORINITANALYTICS);
+            mFirebaseAnalytics = FirebaseAnalytics.getInstance(context);
+            mFirebaseAnalytics.setAnalyticsCollectionEnabled(true);
+            FirebasePlugin.analyticsInit = true;
+            callbackContext.success();
+        } catch (Exception e) {
+            if (FirebasePlugin.crashlyticsInit()) {
+                Crashlytics.logException(e);
+            }
+            callbackContext.error(ERRORINITANALYTICS);
         }
     }
 
@@ -278,14 +280,14 @@ public class FirebasePlugin extends CordovaPlugin {
 
         Log.d(TAG, "Initialising Performance");
         try {
-          FirebasePerformance.getInstance().setPerformanceCollectionEnabled(true);
-          FirebasePlugin.performanceInit = true;
-          callbackContext.success();
-        } catch(Exception e) {
-          if(FirebasePlugin.crashlyticsInit()){
-            Crashlytics.logException(e);
-          }
-          callbackContext.error(ERRORINITPERFORMANCE);
+            FirebasePerformance.getInstance().setPerformanceCollectionEnabled(true);
+            FirebasePlugin.performanceInit = true;
+            callbackContext.success();
+        } catch (Exception e) {
+            if (FirebasePlugin.crashlyticsInit()) {
+                Crashlytics.logException(e);
+            }
+            callbackContext.error(ERRORINITPERFORMANCE);
         }
     }
 
@@ -299,6 +301,10 @@ public class FirebasePlugin extends CordovaPlugin {
         }
     }
 
+    private void onNotificationMarkAsRead(final CallbackContext callbackContext) {
+        FirebasePlugin.notificationMarkAsReadCallbackContext = callbackContext;
+    }
+
     private void onTokenRefresh(final CallbackContext callbackContext) {
         FirebasePlugin.tokenRefreshCallbackContext = callbackContext;
 
@@ -310,8 +316,8 @@ public class FirebasePlugin extends CordovaPlugin {
                         FirebasePlugin.sendToken(currentToken);
                     }
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -337,8 +343,8 @@ public class FirebasePlugin extends CordovaPlugin {
                 try {
                     json.put(key, bundle.get(key));
                 } catch (JSONException e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                     return;
@@ -349,6 +355,32 @@ public class FirebasePlugin extends CordovaPlugin {
             pluginresult.setKeepCallback(true);
             callbackContext.sendPluginResult(pluginresult);
         }
+    }
+
+    public static void sendNotificationMarkAsRead(Bundle bundle) {
+        final CallbackContext callbackContext = FirebasePlugin.notificationMarkAsReadCallbackContext;
+
+        if (callbackContext == null || bundle == null) {
+            return;
+        }
+
+        JSONObject json = new JSONObject();
+        Set<String> keys = bundle.keySet();
+        for (String key : keys) {
+            try {
+                json.put(key, bundle.get(key));
+            } catch (JSONException e) {
+                if (FirebasePlugin.crashlyticsInit()) {
+                    Crashlytics.logException(e);
+                }
+                callbackContext.error(e.getMessage());
+                return;
+            }
+        }
+
+        PluginResult pluginresult = new PluginResult(PluginResult.Status.OK, json);
+        pluginresult.setKeepCallback(true);
+        callbackContext.sendPluginResult(pluginresult);
     }
 
     public static void sendToken(String token) {
@@ -384,6 +416,10 @@ public class FirebasePlugin extends CordovaPlugin {
         return FirebasePlugin.notificationCallbackContext != null;
     }
 
+    public static boolean hasNotificationsMarkAsReadCallback() {
+        return FirebasePlugin.notificationMarkAsReadCallbackContext != null;
+    }
+
     @Override
     public void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -415,8 +451,8 @@ public class FirebasePlugin extends CordovaPlugin {
                     String id = FirebaseInstanceId.getInstance().getId();
                     callbackContext.success(id);
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -431,8 +467,8 @@ public class FirebasePlugin extends CordovaPlugin {
                     String token = FirebaseInstanceId.getInstance().getToken();
                     callbackContext.success(token);
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -451,8 +487,8 @@ public class FirebasePlugin extends CordovaPlugin {
                     object.put("isEnabled", areNotificationsEnabled);
                     callbackContext.success(object);
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -465,14 +501,12 @@ public class FirebasePlugin extends CordovaPlugin {
             public void run() {
                 try {
                     Context context = cordova.getActivity();
-                    SharedPreferences.Editor editor = context.getSharedPreferences(KEY, Context.MODE_PRIVATE).edit();
-                    editor.putInt(KEY, number);
-                    editor.apply();
+                    SharedPrefsUtils.putInt(context, KEY, KEY, number);
                     ShortcutBadger.applyCount(context, number);
                     callbackContext.success();
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -484,13 +518,11 @@ public class FirebasePlugin extends CordovaPlugin {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
                 try {
-                    Context context = cordova.getActivity();
-                    SharedPreferences settings = context.getSharedPreferences(KEY, Context.MODE_PRIVATE);
-                    int number = settings.getInt(KEY, 0);
+                    int number = SharedPrefsUtils.getInt(cordova.getActivity(), KEY, KEY);
                     callbackContext.success(number);
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -505,8 +537,8 @@ public class FirebasePlugin extends CordovaPlugin {
                     FirebaseMessaging.getInstance().subscribeToTopic(topic);
                     callbackContext.success();
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -521,8 +553,8 @@ public class FirebasePlugin extends CordovaPlugin {
                     FirebaseMessaging.getInstance().unsubscribeFromTopic(topic);
                     callbackContext.success();
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -537,8 +569,8 @@ public class FirebasePlugin extends CordovaPlugin {
                     FirebaseInstanceId.getInstance().deleteInstanceId();
                     callbackContext.success();
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -564,15 +596,15 @@ public class FirebasePlugin extends CordovaPlugin {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
                 try {
-                    if(FirebasePlugin.analyticsInit()){
-                      mFirebaseAnalytics.logEvent(name, bundle);
-                      callbackContext.success();
+                    if (FirebasePlugin.analyticsInit()) {
+                        mFirebaseAnalytics.logEvent(name, bundle);
+                        callbackContext.success();
                     } else {
-                      callbackContext.error(ERRORINITANALYTICS);
+                        callbackContext.error(ERRORINITANALYTICS);
                     }
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -584,15 +616,15 @@ public class FirebasePlugin extends CordovaPlugin {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
                 try {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(new Exception(message));
-                      callbackContext.success(1);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(new Exception(message));
+                        callbackContext.success(1);
                     } else {
-                      callbackContext.error(ERRORINITCRASHLYTICS);
+                        callbackContext.error(ERRORINITCRASHLYTICS);
                     }
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.log(e.getMessage());
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.log(e.getMessage());
                     }
                     e.printStackTrace();
                     callbackContext.error(e.getMessage());
@@ -606,15 +638,15 @@ public class FirebasePlugin extends CordovaPlugin {
         cordova.getActivity().runOnUiThread(new Runnable() {
             public void run() {
                 try {
-                  if(FirebasePlugin.analyticsInit()){
-                    mFirebaseAnalytics.setCurrentScreen(cordova.getActivity(), name, null);
-                    callbackContext.success();
-                  } else {
-                    callbackContext.error(ERRORINITANALYTICS);
-                  }
+                    if (FirebasePlugin.analyticsInit()) {
+                        mFirebaseAnalytics.setCurrentScreen(cordova.getActivity(), name, null);
+                        callbackContext.success();
+                    } else {
+                        callbackContext.error(ERRORINITANALYTICS);
+                    }
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -626,15 +658,15 @@ public class FirebasePlugin extends CordovaPlugin {
         cordova.getThreadPool().execute(new Runnable() {
             public void run() {
                 try {
-                  if(FirebasePlugin.analyticsInit()){
-                    mFirebaseAnalytics.setUserId(id);
-                    callbackContext.success();
-                  } else {
-                    callbackContext.error(ERRORINITANALYTICS);
-                  }
+                    if (FirebasePlugin.analyticsInit()) {
+                        mFirebaseAnalytics.setUserId(id);
+                        callbackContext.success();
+                    } else {
+                        callbackContext.error(ERRORINITANALYTICS);
+                    }
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -643,23 +675,23 @@ public class FirebasePlugin extends CordovaPlugin {
     }
 
     private void setUserProperty(final CallbackContext callbackContext, final String name, final String value) {
-      if(FirebasePlugin.analyticsInit()){
-        cordova.getThreadPool().execute(new Runnable() {
-            public void run() {
-                try {
-                    mFirebaseAnalytics.setUserProperty(name, value);
-                    callbackContext.success();
-                } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+        if (FirebasePlugin.analyticsInit()) {
+            cordova.getThreadPool().execute(new Runnable() {
+                public void run() {
+                    try {
+                        mFirebaseAnalytics.setUserProperty(name, value);
+                        callbackContext.success();
+                    } catch (Exception e) {
+                        if (FirebasePlugin.crashlyticsInit()) {
+                            Crashlytics.logException(e);
+                        }
+                        callbackContext.error(e.getMessage());
                     }
-                    callbackContext.error(e.getMessage());
                 }
-            }
-        });
-      } else {
-        callbackContext.error(ERRORINITANALYTICS);
-      }
+            });
+        } else {
+            callbackContext.error(ERRORINITANALYTICS);
+        }
     }
 
     private void activateFetched(final CallbackContext callbackContext) {
@@ -669,8 +701,8 @@ public class FirebasePlugin extends CordovaPlugin {
                     final boolean activated = FirebaseRemoteConfig.getInstance().activateFetched();
                     callbackContext.success(String.valueOf(activated));
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -698,15 +730,15 @@ public class FirebasePlugin extends CordovaPlugin {
                     }).addOnFailureListener(new OnFailureListener() {
                         @Override
                         public void onFailure(Exception e) {
-                            if(FirebasePlugin.crashlyticsInit()){
-                              Crashlytics.logException(e);
+                            if (FirebasePlugin.crashlyticsInit()) {
+                                Crashlytics.logException(e);
                             }
                             callbackContext.error(e.getMessage());
                         }
                     });
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -715,41 +747,41 @@ public class FirebasePlugin extends CordovaPlugin {
     }
 
     private void getByteArray(final CallbackContext callbackContext, final String key, final String namespace) {
-      cordova.getThreadPool().execute(new Runnable() {
-        public void run() {
-            try {
-                byte[] bytes = namespace == null ? FirebaseRemoteConfig.getInstance().getByteArray(key)
-                        : FirebaseRemoteConfig.getInstance().getByteArray(key, namespace);
-                JSONObject object = new JSONObject();
-                object.put("base64", Base64.encodeToString(bytes, Base64.DEFAULT));
-                object.put("array", new JSONArray(bytes));
-                callbackContext.success(object);
-            } catch (Exception e) {
-                if(FirebasePlugin.crashlyticsInit()){
-                    Crashlytics.logException(e);
+        cordova.getThreadPool().execute(new Runnable() {
+            public void run() {
+                try {
+                    byte[] bytes = namespace == null ? FirebaseRemoteConfig.getInstance().getByteArray(key)
+                            : FirebaseRemoteConfig.getInstance().getByteArray(key, namespace);
+                    JSONObject object = new JSONObject();
+                    object.put("base64", Base64.encodeToString(bytes, Base64.DEFAULT));
+                    object.put("array", new JSONArray(bytes));
+                    callbackContext.success(object);
+                } catch (Exception e) {
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
+                    }
+                    callbackContext.error(e.getMessage());
                 }
-                callbackContext.error(e.getMessage());
             }
-        }
-      });
+        });
     }
 
     private void getValue(final CallbackContext callbackContext, final String key, final String namespace) {
-      cordova.getThreadPool().execute(new Runnable() {
-        public void run() {
-            try {
-                FirebaseRemoteConfigValue value = namespace == null
-                        ? FirebaseRemoteConfig.getInstance().getValue(key)
-                        : FirebaseRemoteConfig.getInstance().getValue(key, namespace);
-                callbackContext.success(value.asString());
-            } catch (Exception e) {
-                if(FirebasePlugin.crashlyticsInit()){
-                    Crashlytics.logException(e);
+        cordova.getThreadPool().execute(new Runnable() {
+            public void run() {
+                try {
+                    FirebaseRemoteConfigValue value = namespace == null
+                            ? FirebaseRemoteConfig.getInstance().getValue(key)
+                            : FirebaseRemoteConfig.getInstance().getValue(key, namespace);
+                    callbackContext.success(value.asString());
+                } catch (Exception e) {
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
+                    }
+                    callbackContext.error(e.getMessage());
                 }
-                callbackContext.error(e.getMessage());
             }
-        }
-      });
+        });
     }
 
     private void getInfo(final CallbackContext callbackContext) {
@@ -768,7 +800,7 @@ public class FirebasePlugin extends CordovaPlugin {
 
                     callbackContext.success(info);
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
+                    if (FirebasePlugin.crashlyticsInit()) {
                         Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
@@ -787,8 +819,8 @@ public class FirebasePlugin extends CordovaPlugin {
                     FirebaseRemoteConfig.getInstance().setConfigSettings(settings.build());
                     callbackContext.success();
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -806,8 +838,8 @@ public class FirebasePlugin extends CordovaPlugin {
                         FirebaseRemoteConfig.getInstance().setDefaults(defaultsToMap(defaults), namespace);
                     callbackContext.success();
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -870,8 +902,8 @@ public class FirebasePlugin extends CordovaPlugin {
                                 returnResults.put("verificationId", false);
                                 returnResults.put("instantVerification", true);
                             } catch (JSONException e) {
-                                if(FirebasePlugin.crashlyticsInit()){
-                                  Crashlytics.logException(e);
+                                if (FirebasePlugin.crashlyticsInit()) {
+                                    Crashlytics.logException(e);
                                 }
                                 callbackContext.error(e.getMessage());
                                 return;
@@ -898,8 +930,8 @@ public class FirebasePlugin extends CordovaPlugin {
                                 errorMsg = "The SMS quota for the project has been exceeded";
                             }
 
-                            if(FirebasePlugin.crashlyticsInit()){
-                              Crashlytics.logException(e);
+                            if (FirebasePlugin.crashlyticsInit()) {
+                                Crashlytics.logException(e);
                             }
                             callbackContext.error(errorMsg);
                         }
@@ -916,8 +948,8 @@ public class FirebasePlugin extends CordovaPlugin {
                                 returnResults.put("verificationId", verificationId);
                                 returnResults.put("instantVerification", false);
                             } catch (JSONException e) {
-                                if(FirebasePlugin.crashlyticsInit()){
-                                  Crashlytics.logException(e);
+                                if (FirebasePlugin.crashlyticsInit()) {
+                                    Crashlytics.logException(e);
                                 }
                                 callbackContext.error(e.getMessage());
                                 return;
@@ -934,8 +966,8 @@ public class FirebasePlugin extends CordovaPlugin {
                             cordova.getActivity(), // Activity (for callback binding)
                             mCallbacks); // OnVerificationStateChangedCallbacks
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
-                      Crashlytics.logException(e);
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.logException(e);
                     }
                     callbackContext.error(e.getMessage());
                 }
@@ -951,143 +983,143 @@ public class FirebasePlugin extends CordovaPlugin {
 
     private void startTrace(final CallbackContext callbackContext, final String name) {
         final FirebasePlugin self = this;
-        if(FirebasePlugin.performanceInit()){
-          cordova.getThreadPool().execute(new Runnable() {
-              public void run() {
-                  try {
+        if (FirebasePlugin.performanceInit()) {
+            cordova.getThreadPool().execute(new Runnable() {
+                public void run() {
+                    try {
 
-                      Trace myTrace = null;
-                      if (self.traces.containsKey(name)) {
-                          myTrace = self.traces.get(name);
-                      }
+                        Trace myTrace = null;
+                        if (self.traces.containsKey(name)) {
+                            myTrace = self.traces.get(name);
+                        }
 
-                      if (myTrace == null) {
-                          myTrace = FirebasePerformance.getInstance().newTrace(name);
-                          myTrace.start();
-                          self.traces.put(name, myTrace);
-                      }
+                        if (myTrace == null) {
+                            myTrace = FirebasePerformance.getInstance().newTrace(name);
+                            myTrace.start();
+                            self.traces.put(name, myTrace);
+                        }
 
-                      callbackContext.success();
-                  } catch (Exception e) {
-                      if(FirebasePlugin.crashlyticsInit()){
-                        Crashlytics.logException(e);
-                      }
-                      e.printStackTrace();
-                      callbackContext.error(e.getMessage());
-                  }
-              }
-          });
+                        callbackContext.success();
+                    } catch (Exception e) {
+                        if (FirebasePlugin.crashlyticsInit()) {
+                            Crashlytics.logException(e);
+                        }
+                        e.printStackTrace();
+                        callbackContext.error(e.getMessage());
+                    }
+                }
+            });
         } else {
-          callbackContext.error(ERRORINITPERFORMANCE);
+            callbackContext.error(ERRORINITPERFORMANCE);
         }
     }
 
     private void incrementCounter(final CallbackContext callbackContext, final String name, final String counterNamed) {
         final FirebasePlugin self = this;
-        if(FirebasePlugin.performanceInit()){
-          cordova.getThreadPool().execute(new Runnable() {
-              public void run() {
-                  try {
+        if (FirebasePlugin.performanceInit()) {
+            cordova.getThreadPool().execute(new Runnable() {
+                public void run() {
+                    try {
 
-                      Trace myTrace = null;
-                      if (self.traces.containsKey(name)) {
-                          myTrace = self.traces.get(name);
-                      }
+                        Trace myTrace = null;
+                        if (self.traces.containsKey(name)) {
+                            myTrace = self.traces.get(name);
+                        }
 
-                      if (myTrace != null && myTrace instanceof Trace) {
-                          myTrace.incrementCounter(counterNamed);
-                          callbackContext.success();
-                      } else {
-                          callbackContext.error("Trace not found");
-                      }
-                  } catch (Exception e) {
-                      if(FirebasePlugin.crashlyticsInit()){
-                        Crashlytics.logException(e);
-                      }
-                      e.printStackTrace();
-                      callbackContext.error(e.getMessage());
-                  }
-              }
-          });
+                        if (myTrace != null && myTrace instanceof Trace) {
+                            myTrace.incrementCounter(counterNamed);
+                            callbackContext.success();
+                        } else {
+                            callbackContext.error("Trace not found");
+                        }
+                    } catch (Exception e) {
+                        if (FirebasePlugin.crashlyticsInit()) {
+                            Crashlytics.logException(e);
+                        }
+                        e.printStackTrace();
+                        callbackContext.error(e.getMessage());
+                    }
+                }
+            });
         } else {
-          callbackContext.error(ERRORINITPERFORMANCE);
+            callbackContext.error(ERRORINITPERFORMANCE);
         }
     }
 
     private void stopTrace(final CallbackContext callbackContext, final String name) {
         final FirebasePlugin self = this;
-        if(FirebasePlugin.performanceInit()){
-          cordova.getThreadPool().execute(new Runnable() {
-              public void run() {
-                  try {
+        if (FirebasePlugin.performanceInit()) {
+            cordova.getThreadPool().execute(new Runnable() {
+                public void run() {
+                    try {
 
-                      Trace myTrace = null;
-                      if (self.traces.containsKey(name)) {
-                          myTrace = self.traces.get(name);
-                      }
+                        Trace myTrace = null;
+                        if (self.traces.containsKey(name)) {
+                            myTrace = self.traces.get(name);
+                        }
 
-                      if (myTrace != null && myTrace instanceof Trace) { //
-                          myTrace.stop();
-                          self.traces.remove(name);
-                          callbackContext.success();
-                      } else {
-                          callbackContext.error("Trace not found");
-                      }
-                  } catch (Exception e) {
-                      if(FirebasePlugin.crashlyticsInit()){
-                        Crashlytics.logException(e);
-                      }
-                      e.printStackTrace();
-                      callbackContext.error(e.getMessage());
-                  }
-              }
-          });
+                        if (myTrace != null && myTrace instanceof Trace) { //
+                            myTrace.stop();
+                            self.traces.remove(name);
+                            callbackContext.success();
+                        } else {
+                            callbackContext.error("Trace not found");
+                        }
+                    } catch (Exception e) {
+                        if (FirebasePlugin.crashlyticsInit()) {
+                            Crashlytics.logException(e);
+                        }
+                        e.printStackTrace();
+                        callbackContext.error(e.getMessage());
+                    }
+                }
+            });
         } else {
-          callbackContext.error(ERRORINITPERFORMANCE);
+            callbackContext.error(ERRORINITPERFORMANCE);
         }
     }
 
     private void setAnalyticsCollectionEnabled(final CallbackContext callbackContext, final boolean enabled) {
         final FirebasePlugin self = this;
-        if(FirebasePlugin.analyticsInit()){
-          cordova.getThreadPool().execute(new Runnable() {
-              public void run() {
-                  try {
-                      mFirebaseAnalytics.setAnalyticsCollectionEnabled(enabled);
-                      callbackContext.success();
-                  } catch (Exception e) {
-                      if(FirebasePlugin.crashlyticsInit()){
-                        Crashlytics.log(e.getMessage());
-                      }
-                      e.printStackTrace();
-                      callbackContext.error(e.getMessage());
-                  }
-              }
-          });
+        if (FirebasePlugin.analyticsInit()) {
+            cordova.getThreadPool().execute(new Runnable() {
+                public void run() {
+                    try {
+                        mFirebaseAnalytics.setAnalyticsCollectionEnabled(enabled);
+                        callbackContext.success();
+                    } catch (Exception e) {
+                        if (FirebasePlugin.crashlyticsInit()) {
+                            Crashlytics.log(e.getMessage());
+                        }
+                        e.printStackTrace();
+                        callbackContext.error(e.getMessage());
+                    }
+                }
+            });
         } else {
-          callbackContext.error(ERRORINITANALYTICS);
+            callbackContext.error(ERRORINITANALYTICS);
         }
     }
 
     private void setPerformanceCollectionEnabled(final CallbackContext callbackContext, final boolean enabled) {
         final FirebasePlugin self = this;
-        if(FirebasePlugin.performanceInit()){
-          cordova.getThreadPool().execute(new Runnable() {
-              public void run() {
-                  try {
-                      FirebasePerformance.getInstance().setPerformanceCollectionEnabled(enabled);
-                      callbackContext.success();
-                  } catch (Exception e) {
-                      if(FirebasePlugin.crashlyticsInit()){
-                        Crashlytics.log(e.getMessage());
-                      }
-                      e.printStackTrace();
-                      callbackContext.error(e.getMessage());
-                  }
-              }
-          });
+        if (FirebasePlugin.performanceInit()) {
+            cordova.getThreadPool().execute(new Runnable() {
+                public void run() {
+                    try {
+                        FirebasePerformance.getInstance().setPerformanceCollectionEnabled(enabled);
+                        callbackContext.success();
+                    } catch (Exception e) {
+                        if (FirebasePlugin.crashlyticsInit()) {
+                            Crashlytics.log(e.getMessage());
+                        }
+                        e.printStackTrace();
+                        callbackContext.error(e.getMessage());
+                    }
+                }
+            });
         } else {
-          callbackContext.error(ERRORINITPERFORMANCE);
+            callbackContext.error(ERRORINITPERFORMANCE);
         }
     }
 
@@ -1096,13 +1128,13 @@ public class FirebasePlugin extends CordovaPlugin {
             public void run() {
                 try {
                     Context context = cordova.getActivity();
-                    NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+                    android.app.NotificationManager nm = (android.app.NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
                     nm.cancelAll();
                     callbackContext.success();
                 } catch (Exception e) {
-                  if(FirebasePlugin.crashlyticsInit()){
-                    Crashlytics.log(e.getMessage());
-                  }
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.log(e.getMessage());
+                    }
                 }
             }
         });
@@ -1113,13 +1145,43 @@ public class FirebasePlugin extends CordovaPlugin {
             public void run() {
                 try {
                     Context context = cordova.getActivity();
-                    NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+                    android.app.NotificationManager nm = (android.app.NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
                     nm.cancel(id);
                     callbackContext.success();
                 } catch (Exception e) {
-                    if(FirebasePlugin.crashlyticsInit()){
+                    if (FirebasePlugin.crashlyticsInit()) {
                         Crashlytics.log(e.getMessage());
                     }
+                }
+            }
+        });
+    }
+
+    public void scheduleLocalNotification(final CallbackContext callbackContext, final JSONObject params) {
+        cordova.getThreadPool().execute(new Runnable() {
+            public void run() {
+                try {
+                    Context activityContext = cordova.getActivity();
+                    Context appContext = activityContext.getApplicationContext();
+
+                    String id = params.getString("id");
+                    String target = params.getString("target");
+                    String username = params.getString("username");
+                    String groupName = params.getString("groupName");
+                    String message = params.getString("message");
+                    String eventType = params.getString("eventType");
+                    String nsound = params.getString("nsound");
+                    String sound = params.getString("sound");
+                    String lights = params.getString("lights");
+
+                    NotificationManager.displayNotification(activityContext, appContext, id, target, username, groupName, message, eventType, nsound, true, sound, lights);
+
+                    callbackContext.success();
+                } catch (Exception e) {
+                    if (FirebasePlugin.crashlyticsInit()) {
+                        Crashlytics.log(e.getMessage());
+                    }
+                    callbackContext.error(e.getMessage());
                 }
             }
         });
