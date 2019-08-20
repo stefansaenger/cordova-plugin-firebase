@@ -17,7 +17,53 @@ repositories {
 
 dependencies {
     compile 'me.leolin:ShortcutBadger:1.1.4@aar'
-    compile 'com.google.firebase:firebase-auth:+'
+
+    compile ('com.google.firebase:firebase-auth:17.0.0') {
+      force = true
+    }
+    compile ('com.google.firebase:firebase-core:17.0.0') {
+      force = true
+    }
+    compile ('com.google.firebase:firebase-common:17.0.0') {
+      force = true
+    }
+    compile ('com.google.firebase:firebase-config:17.0.0') {
+      force = true
+    }
+    compile ('com.google.firebase:firebase-perf:17.0.0') {
+      force = true
+    }
+    compile('com.google.firebase:firebase-iid:17.0.4') {
+      force = true
+    }
+    compile('com.google.firebase:firebase-messaging:17.5.0') {
+      force = true
+    }
+
+
+    compile ('com.google.android.gms:play-services-basement:16.0.1') {
+      force = true
+    }
+    compile ('com.google.android.gms:play-services-tasks:16.0.1') {
+      force = true
+    }
+    compile ('com.google.android.gms:play-services-base:16.0.1') {
+      force = true
+    }
+    compile ('com.google.android.gms:play-services-stats:16.0.1') {
+      force = true
+    }
+    compile ('com.google.android.gms:play-services-measurement-impl:16.5.0') {
+      force = true
+    }
+    compile ('com.google.android.gms:play-services-measurement:16.5.0') {
+      force = true
+    }
+    compile ('com.google.android.gms:play-services-measurement-sdk:16.5.0') {
+      force = true
+    }
+
+
     compile('com.crashlytics.sdk.android:crashlytics:2.9.1@aar') {
        transitive = true
     }

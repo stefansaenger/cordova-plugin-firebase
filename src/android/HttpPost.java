@@ -6,7 +6,7 @@ import android.content.SharedPreferences;
 import android.preference.PreferenceManager;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
-
+import android.os.Bundle;
 
 import org.json.JSONObject;
 import com.google.gson.Gson;
@@ -18,6 +18,7 @@ import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Date;
+import java.util.ArrayList;
 
 class HttpPost implements Runnable {
     private String body;
@@ -139,6 +140,14 @@ class HttpPost implements Runnable {
                 this.saveMarkAsReadOnError(context, sender);
             }
             notificationManager.cancel(notificationId);
+        } finally {
+            if(requestType == RequestType.MARK_AS_READ){
+                // hide all other notifications for this target
+                FirebasePluginMessagingService.hideNotificationsForTarget(context, sender);
+                Bundle data = new Bundle();
+                data.putString("target", sender);
+                FirebasePlugin.sendNotificationMarkAsRead(data);
+            }
         }
     }
 
@@ -194,8 +203,10 @@ class HttpPost implements Runnable {
 
     private class MarkAsRead {
         String target;
+        long timestamp;
         public MarkAsRead(String target) {
             this.target = target;
+            this.timestamp = new Date().getTime();
         }
     }
 
