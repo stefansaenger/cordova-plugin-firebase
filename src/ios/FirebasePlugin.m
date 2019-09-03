@@ -565,8 +565,11 @@ static FirebasePlugin *firebasePlugin;
 
 - (void)clearAllNotifications:(CDVInvokedUrlCommand *)command {
 	[self.commandDelegate runInBackground:^{
-        [[UIApplication sharedApplication] setApplicationIconBadgeNumber:1];
-        [[UIApplication sharedApplication] setApplicationIconBadgeNumber:0];
+        // [[UIApplication sharedApplication] setApplicationIconBadgeNumber:1];
+        // [[UIApplication sharedApplication] setApplicationIconBadgeNumber:0];
+        #if defined(__IPHONE_10_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_10_0
+          [[UNUserNotificationCenter currentNotificationCenter] removeAllDeliveredNotifications];
+        #endif
 
         CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
         [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
