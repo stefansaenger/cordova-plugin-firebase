@@ -1,7 +1,11 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="default_notification_channel_id">fcm_default_channel</string>
+    <string name="default_notification_channel_id" translatable="false">fcm_default_channel</string>
     <string name="default_notification_channel_name">Default</string>
-    <string name="silent_notification_channel_id">fcm_muted_channel</string>
+    <string name="silent_notification_channel_id" translatable="false">fcm_muted_channel</string>
     <string name="silent_notification_channel_name">DefaultMute</string>
+    <string name="call_notifications_channel_name">Calls</string>
+	<string name="incoming_call_format">Incoming %s call</string>
+	<string name="call_action_decline">Decline</string>
+	<string name="call_action_accept">Accept</string>
 </resources>

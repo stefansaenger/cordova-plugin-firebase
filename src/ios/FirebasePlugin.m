@@ -2,14 +2,14 @@
 #import <Cordova/CDV.h>
 #import "AppDelegate.h"
 #import "Firebase.h"
-#import <Fabric/Fabric.h>
-#import <Crashlytics/Crashlytics.h>
+// #import <Fabric/Fabric.h>
+// #import <Crashlytics/Crashlytics.h>
 @import FirebaseInstanceID;
 @import FirebaseMessaging;
 @import FirebaseAnalytics;
 @import FirebaseRemoteConfig;
 @import FirebasePerformance;
-@import FirebaseAuth;
+// @import FirebaseAuth;
 
 #if defined(__IPHONE_10_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_10_0
 @import UserNotifications;
@@ -51,14 +51,14 @@ static FirebasePlugin *firebasePlugin;
 
 - (void)initCrashlytics:(CDVInvokedUrlCommand *)command {
     __block CDVPluginResult *pluginResult;
-    [Fabric with:@[[Crashlytics class]]];
-
-    if ([Crashlytics sharedInstance] == nil) {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR];
-    } else {
-        self.crashlyticsInit = YES;
+//    [Fabric with:@[[Crashlytics class]]];
+//
+//    if ([Crashlytics sharedInstance] == nil) {
+//        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR];
+//    } else {
+//        self.crashlyticsInit = YES;
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
-    }
+//    }
 
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
@@ -196,37 +196,37 @@ static FirebasePlugin *firebasePlugin;
     return;
 }
 
-- (void)verifyPhoneNumber:(CDVInvokedUrlCommand *)command {
-    [self getVerificationID:command];
-}
-
-- (void)getVerificationID:(CDVInvokedUrlCommand *)command {
-    NSString* number = [command.arguments objectAtIndex:0];
-
-    [[FIRPhoneAuthProvider provider]
-    verifyPhoneNumber:number
-           UIDelegate:nil
-           completion:^(NSString *_Nullable verificationID, NSError *_Nullable error) {
-
-    NSDictionary *message;
-
-    if (error) {
-        // Verification code not sent.
-        message = @{
-            @"code": [NSNumber numberWithInteger:error.code],
-            @"description": error.description == nil ? [NSNull null] : error.description
-        };
-
-        CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:message];
-
-        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-    } else {
-        // Successful.
-        CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:verificationID];
-        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-    }
-  }];
-}
+// - (void)verifyPhoneNumber:(CDVInvokedUrlCommand *)command {
+//     [self getVerificationID:command];
+// }
+//
+// - (void)getVerificationID:(CDVInvokedUrlCommand *)command {
+//     NSString* number = [command.arguments objectAtIndex:0];
+//
+//     [[FIRPhoneAuthProvider provider]
+//     verifyPhoneNumber:number
+//            UIDelegate:nil
+//            completion:^(NSString *_Nullable verificationID, NSError *_Nullable error) {
+//
+//     NSDictionary *message;
+//
+//     if (error) {
+//         // Verification code not sent.
+//         message = @{
+//             @"code": [NSNumber numberWithInteger:error.code],
+//             @"description": error.description == nil ? [NSNull null] : error.description
+//         };
+//
+//         CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsDictionary:message];
+//
+//         [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+//     } else {
+//         // Successful.
+//         CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:verificationID];
+//         [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+//     }
+//   }];
+// }
 
 - (void)setBadgeNumber:(CDVInvokedUrlCommand *)command {
     int number = [[command.arguments objectAtIndex:0] intValue];
@@ -352,7 +352,7 @@ static FirebasePlugin *firebasePlugin;
         CDVPluginResult *pluginResult;
         NSString* errorMessage = [command.arguments objectAtIndex:0];
         if(self.crashlyticsInit){
-          CLSNSLog(@"%@", errorMessage);
+          // CLSNSLog(@"%@", errorMessage);
           pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
         } else {
           pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:ERRORINITCRASHLYTICS];
@@ -565,8 +565,11 @@ static FirebasePlugin *firebasePlugin;
 
 - (void)clearAllNotifications:(CDVInvokedUrlCommand *)command {
 	[self.commandDelegate runInBackground:^{
-        [[UIApplication sharedApplication] setApplicationIconBadgeNumber:1];
-        [[UIApplication sharedApplication] setApplicationIconBadgeNumber:0];
+        // [[UIApplication sharedApplication] setApplicationIconBadgeNumber:1];
+        // [[UIApplication sharedApplication] setApplicationIconBadgeNumber:0];
+        #if defined(__IPHONE_10_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_10_0
+          [[UNUserNotificationCenter currentNotificationCenter] removeAllDeliveredNotifications];
+        #endif
 
         CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
         [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];

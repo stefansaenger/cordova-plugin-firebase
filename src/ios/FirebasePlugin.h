@@ -7,8 +7,8 @@
 - (void)initCrashlytics:(CDVInvokedUrlCommand*)command;
 - (void)initAnalytics:(CDVInvokedUrlCommand*)command;
 - (void)initPerformance:(CDVInvokedUrlCommand*)command;
-- (void)getVerificationID:(CDVInvokedUrlCommand*)command;
-- (void)verifyPhoneNumber:(CDVInvokedUrlCommand*)command;
+// - (void)getVerificationID:(CDVInvokedUrlCommand*)command;
+// - (void)verifyPhoneNumber:(CDVInvokedUrlCommand*)command;
 - (void)getInstanceId:(CDVInvokedUrlCommand*)command;
 - (void)getId:(CDVInvokedUrlCommand*)command;
 - (void)getToken:(CDVInvokedUrlCommand*)command;

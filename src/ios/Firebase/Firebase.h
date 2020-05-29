@@ -14,9 +14,9 @@ Firebase services work as intended."
     #endif // #ifndef FIREBASE_ANALYTICS_SUPPRESS_WARNING
   #endif
 
-  #if __has_include(<FirebaseAuth/FirebaseAuth.h>)
-    #import <FirebaseAuth/FirebaseAuth.h>
-  #endif
+  // #if __has_include(<FirebaseAuth/FirebaseAuth.h>)
+  //   #import <FirebaseAuth/FirebaseAuth.h>
+  // #endif
 
   #if __has_include(<FirebaseCrash/FirebaseCrash.h>)
     #import <FirebaseCrash/FirebaseCrash.h>
@@ -94,12 +94,12 @@ Firebase services work as intended."
     #import <GoogleMobileAds/GoogleMobileAds.h>
   #endif
 
-  #if __has_include(<Fabric/Fabric.h>)
-    #import <Fabric/Fabric.h>
-  #endif
+  // #if __has_include(<Fabric/Fabric.h>)
+  //   #import <Fabric/Fabric.h>
+  // #endif
 
-  #if __has_include(<Crashlytics/Crashlytics.h>)
-    #import <Crashlytics/Crashlytics.h>
-  #endif
+  // #if __has_include(<Crashlytics/Crashlytics.h>)
+  //   #import <Crashlytics/Crashlytics.h>
+  // #endif
 
 #endif  // defined(__has_include)
